@@ -10,8 +10,14 @@ import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
 
 import { loadConfig } from "./config.js";
 import { createServer } from "./server.js";
+import { runSetup } from "./setup.js";
 
 async function main(): Promise<void> {
+  if (process.argv[2] === "setup") {
+    await runSetup();
+    return;
+  }
+
   const config = loadConfig();
   const server = createServer(config);
   const transport = new StdioServerTransport();

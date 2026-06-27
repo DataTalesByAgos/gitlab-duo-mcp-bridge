@@ -74,9 +74,30 @@ result back as clean JSON. You don't copy code around — Duo gathers it itself.
 
 ## Quick start (plug and play)
 
-No clone, no build, no paths to figure out. Add one line to your MCP client and
-`npx` downloads and runs the bridge automatically the first time your agent
-calls it.
+No clone, no build, no paths to figure out. You can configure your environment automatically with a single command, or add it manually.
+
+### 1. Automatic installation (Recommended)
+
+Run the automatic configurator from your terminal:
+
+```bash
+npx gitlab-duo-mcp-bridge setup
+```
+
+This script will automatically detect and configure all active MCP clients on your system:
+- **Claude Desktop** (both standard and Windows Microsoft Store packages)
+- **Cursor**
+- **Cline** (VS Code)
+- **Roo Code / Roo Cline** (VS Code)
+- **Windsurf**
+- **Zed**
+- **Continue**
+
+Once run, simply restart or reload your editor/agent.
+
+---
+
+### 2. Manual configuration
 
 **Claude Code:**
 
