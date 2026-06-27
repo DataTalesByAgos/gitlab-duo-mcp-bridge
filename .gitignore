@@ -7,3 +7,6 @@ dist/
 
 # Oversized-goal temp files written by the bridge (they contain your diff)
 .gitlab-duo-review-*.txt
+
+# Junie internal directory
+.junie/
