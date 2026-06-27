@@ -1,6 +1,6 @@
 {
   "name": "gitlab-duo-mcp-bridge",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "MCP server that wraps the GitLab Duo CLI as a clean, fault-tolerant duo_review tool for AI coding agents.",
   "type": "module",
   "bin": {
