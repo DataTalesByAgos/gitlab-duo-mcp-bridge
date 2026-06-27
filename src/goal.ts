@@ -1,12 +1,16 @@
 /**
  * Builds the goal/prompt string handed to the Duo CLI.
  *
- * The bridge deliberately does NOT paste diffs or file contents into the
- * prompt. GitLab Duo is agentic: in headless mode it has its own tools (git,
- * file reading, ripgrep/grep) and auto-approves them, so we simply ask it to
- * gather and review the changes itself. This keeps the calling agent cheap
- * (it sends no code), keeps the prompt tiny (no command-line length limits),
- * and means the heavy lifting runs on GitLab's side.
+ * When the caller provides a `diff`, file paths, and/or extra `instructions`,
+ * they are embedded directly into the prompt so Duo reviews exactly what was
+ * passed. When nothing concrete is provided, the bridge falls back to Duo's
+ * agentic abilities: in headless mode it has its own tools (git, file reading,
+ * ripgrep/grep) and auto-approves them, so we ask it to gather and review the
+ * working-tree changes itself.
+ *
+ * Large prompts (e.g. a big embedded diff) are handled by the caller: above
+ * `DUO_MAX_INLINE_GOAL_CHARS` the goal is written to a temp file and Duo is
+ * asked to read it, avoiding OS command-line length limits (ENAMETOOLONG).
  *
  * The prompt asks Duo to answer with a single JSON object matching the schema
  * the normalizer expects. This is best-effort: Duo may still answer with prose,
@@ -14,6 +18,8 @@
  */
 
 export interface ReviewInput {
+  /** Unified diff to review (e.g. output of `git diff`). */
+  diff?: string;
   /** Optional file paths to focus the review on (Duo opens them itself). */
   files?: string[];
   /** Extra free-form guidance for the reviewer. */
@@ -44,19 +50,38 @@ export function buildReviewGoal(input: ReviewInput): string {
 
   const parts: string[] = [];
 
-  parts.push(
-    "You are a senior software engineer performing a thorough code review. " +
-      "Use your own tools (git, file reading, ripgrep/grep) to gather the code " +
-      "to review YOURSELF — no diff or file contents are included in this " +
-      "prompt, so do not wait for any to be provided.",
-  );
+  const diff = input.diff?.trim() ?? "";
+  const hasDiff = diff !== "";
+  const files = input.files ?? [];
+  const hasFiles = files.length > 0;
 
-  if (input.files && input.files.length > 0) {
+  if (hasDiff || hasFiles) {
     parts.push(
-      "Review these files (open and read them yourself):\n- " +
-        input.files.join("\n- "),
+      "You are a senior software engineer performing a thorough code review.",
     );
   } else {
+    parts.push(
+      "You are a senior software engineer performing a thorough code review. " +
+        "Use your own tools (git, file reading, ripgrep/grep) to gather the " +
+        "code to review YOURSELF — no diff or file contents are included in " +
+        "this prompt, so do not wait for any to be provided.",
+    );
+  }
+
+  if (hasDiff) {
+    parts.push(
+      "Review the following unified diff:\n\n```diff\n" + diff + "\n```",
+    );
+  }
+
+  if (hasFiles) {
+    parts.push(
+      "Review these files (open and read them yourself):\n- " +
+        files.join("\n- "),
+    );
+  }
+
+  if (!hasDiff && !hasFiles) {
     parts.push(
       "Review the current uncommitted changes in the working tree: run " +
         "`git diff` and `git status` yourself and read the changed files. If " +

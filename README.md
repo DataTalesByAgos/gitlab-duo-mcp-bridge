@@ -1,5 +1,10 @@
 # gitlab-duo-mcp-bridge
 
+[![npm version](https://img.shields.io/npm/v/gitlab-duo-mcp-bridge.svg)](https://www.npmjs.com/package/gitlab-duo-mcp-bridge)
+[![npm downloads](https://img.shields.io/npm/dm/gitlab-duo-mcp-bridge.svg)](https://www.npmjs.com/package/gitlab-duo-mcp-bridge)
+[![license](https://img.shields.io/npm/l/gitlab-duo-mcp-bridge.svg)](./LICENSE)
+[![node](https://img.shields.io/node/v/gitlab-duo-mcp-bridge.svg)](https://nodejs.org)
+
 A tiny **MCP server** that wraps the **GitLab Duo CLI** as a single, clean,
 fault-tolerant tool: **`duo_review`**.
 
@@ -35,15 +40,73 @@ bridge isolates that fragility in **one place** behind a versioned tool:
 - It **never throws**: launch failures and timeouts come back as structured
   results with `isError`, so your agent stays in control.
 
+## What it can do
+
+`duo_review` hands a full code review to GitLab Duo's agent and gives you the
+result back as clean JSON. You don't copy code around — Duo gathers it itself.
+
+- **Reviews your changes automatically.** By default it runs `git diff` and
+  `git status` on its own, reads the changed files, and reviews your uncommitted
+  work (or the last commit if the tree is already clean).
+- **Or reviews exactly what you point it at.** Pass a `diff`, a list of `files`,
+  or free-form `instructions` to focus the review.
+- **Looks for real problems, not just style:** bugs and correctness, security
+  vulnerabilities, architecture/design smells, performance, and maintainability.
+- **Gives you actionable findings.** Every issue comes with a type, a severity
+  (`critical` → `info`), the file and line, a clear message, and a concrete fix
+  suggestion — so your agent can go ahead and apply the high-severity ones.
+- **Runs on the model you choose** (Claude, GPT, Gemini — see
+  [Choosing the AI model](#choosing-the-ai-model-anthropic-openai-gemini)), or
+  GitLab's default.
+- **It's an agent, not a linter.** Under the hood Duo uses its own tools (git,
+  file reading, ripgrep) and works on its own, so it understands context across
+  files instead of checking one line at a time.
+
 ## Requirements
 
 - **Node.js >= 20** (tested on 24).
 - The **GitLab Duo CLI**, reachable from your shell. Most setups use the GitLab
   CLI extension: `glab duo cli run --goal "..."`. The standalone `duo` binary
-  works too. The exact command is **fully configurable** (see below), and you
-  can develop without it using **MOCK mode**.
+  works too. The exact command is **fully configurable** (see below).
 
-## Install & build
+> Just exploring? You can try the bridge **without installing Duo** using MOCK
+> mode — see [Try it without Duo](#try-it-without-duo-optional) at the end.
+
+## Quick start (plug and play)
+
+No clone, no build, no paths to figure out. Add one line to your MCP client and
+`npx` downloads and runs the bridge automatically the first time your agent
+calls it.
+
+**Claude Code:**
+
+```bash
+claude mcp add gitlab-duo -- npx -y gitlab-duo-mcp-bridge
+```
+
+**Any other MCP client** (opencode, Codex, Gemini CLI, …) — drop this into its
+MCP config:
+
+```jsonc
+{
+  "mcpServers": {
+    "gitlab-duo": {
+      "command": "npx",
+      "args": ["-y", "gitlab-duo-mcp-bridge"]
+    }
+  }
+}
+```
+
+That's the whole setup. Your agent now has a `duo_review` tool. In clients that
+support tool mentions (like Claude Code) you can call it right from your prompt:
+
+> "Using `@duo_review`, review this project and look for improvements."
+
+Everything else (the Duo command, model, timeouts) has sensible defaults and is
+optional.
+
+## Run from source (for contributors)
 
 ```bash
 npm install
@@ -137,52 +200,132 @@ shell, no injection, no quoting issues.
 A human-readable text version is also returned in `content` for agents that
 don't read `structuredContent`.
 
-## Connect it to your agent
+## Using it in a session
 
-Point your MCP client at the built entrypoint with `command: node`,
-`args: ["<abs>/dist/src/index.js"]`. Examples:
+Once it's connected, just talk to your agent normally. In clients that support
+tool mentions (like Claude Code), `@duo_review` calls the tool directly — no
+flags, no setup:
 
-### Claude Code
+> "Using `@duo_review`, review this project and look for improvements."
 
-```bash
-claude mcp add gitlab-duo --env DUO_MOCK=1 -- node /abs/path/gitlab-duo-mcp-bridge/dist/src/index.js
-# verify inside Claude Code:
-/mcp
-```
+A few more things you can ask:
 
-(Drop `--env DUO_MOCK=1` once your real Duo CLI is set up.)
+> "`@duo_review` my uncommitted changes, then apply the high-severity fixes
+> here in my local repo."
 
-### opencode / Codex / Gemini CLI (generic stdio config)
+> "Review `src/auth.ts` and `src/db.ts` with `duo_review` and focus on
+> security."
+
+In Claude Code you can confirm it's wired up with `/mcp`.
+(If your client doesn't support `@` mentions, just name the tool in plain
+language — *"run `duo_review` on my changes"* — and the agent will call it.)
+
+### Optional tweaks
+
+The defaults assume `glab duo cli run`. If your Duo command is different, or you
+want to pin a model, add an `env` block to the same config:
 
 ```jsonc
 {
   "mcpServers": {
     "gitlab-duo": {
-      "command": "node",
-      "args": ["/abs/path/gitlab-duo-mcp-bridge/dist/src/index.js"],
+      "command": "npx",
+      "args": ["-y", "gitlab-duo-mcp-bridge"],
       "env": {
         "DUO_CLI_COMMAND": "glab",
-        "DUO_CLI_BASE_ARGS": "duo cli run"
-        // "DUO_MOCK": "1"  // uncomment to test without Duo
+        "DUO_CLI_BASE_ARGS": "duo cli run",
+        "GITLAB_DUO_MODEL": "claude_sonnet_4_6"
       }
     }
   }
 }
 ```
 
-Then, in a session, ask your agent something like:
+> Running from a local clone instead of npm? Use `"command": "node"` with
+> `"args": ["<abs>/dist/src/index.js"]` after `npm run build`.
 
-> "Review this diff with `duo_review`, then apply the high-severity fixes here
-> in my local repo."
+## Choosing the AI model (Anthropic, OpenAI, Gemini)
 
-## Try it without Duo (MOCK mode)
+GitLab Duo can run on different underlying models, and the bridge lets you pick
+one — globally or per call. There is **nothing to code**: it just forwards your
+choice to Duo as `--model <id>`.
+
+- **Default for every call:** set `GITLAB_DUO_MODEL` in the client `env` (as in
+  the config above).
+- **Per call:** the `duo_review` tool accepts a `model` field, so you can ask
+  your agent: *"Review this with `duo_review` using `model: gpt_5_codex`."*
+
+Models are identified by GitLab's internal `gitlab_identifier` (not friendly
+names like "claude-sonnet"). Some common ones:
+
+| Provider | Model | `gitlab_identifier` |
+| --- | --- | --- |
+| Anthropic | Claude Sonnet 4.6 | `claude_sonnet_4_6` |
+| Anthropic | Claude Haiku 4.5 (fast/cheap) | `claude_haiku_4_5_20251001` |
+| Anthropic | Claude Opus 4.5 | `claude_opus_4_5_20251101` |
+| OpenAI | GPT-5 Codex | `gpt_5_codex` |
+| OpenAI | GPT-5.1 | `gpt_5` |
+| OpenAI | GPT-5-Mini (cheap) | `gpt_5_mini` |
+| Google | Gemini 2.5 Flash | `gemini_2_5_flash_vertex` |
+
+> Identifiers change over time; the authoritative, always-current list lives in
+> GitLab's `ai_gateway/model_selection/models.yml`.
+
+**Good to know:**
+
+- **No fallback.** If you pick a model your namespace can't use, the call
+  **fails** — it does not silently fall back to the default. When in doubt,
+  leave `GITLAB_DUO_MODEL` unset and use GitLab's default.
+- Model selection needs **GitLab 18.4+** with model switching enabled by your
+  group admin. If you belong to several Duo namespaces, set a default one.
+
+## Try it without Duo (optional)
+
+Set `DUO_MOCK=1` and the bridge returns a realistic **canned** review — no Duo
+needed. Handy to wire up and validate the whole flow in your agent **before**
+installing/authenticating Duo, then drop the flag.
 
 ```bash
-DUO_MOCK=1 node dist/src/index.js     # or set env in your MCP client
+# from npm:
+DUO_MOCK=1 npx -y gitlab-duo-mcp-bridge
+# or from a local clone:
+DUO_MOCK=1 node dist/src/index.js
 ```
 
-`duo_review` returns a realistic canned review so you can wire up and validate
-the whole flow in your agent **before** installing/authenticating Duo.
+Or add `"DUO_MOCK": "1"` to the `env` block of your MCP client config.
+
+## Security — please read before reviewing untrusted code
+
+The bridge is safe by construction in the obvious ways: the goal/prompt is passed
+as a **single argv entry** with `shell: false` (no shell, no command injection,
+no quoting bugs), the normalizer uses `JSON.parse` (never `eval`), and the
+subprocess has a timeout and **never throws**. `npm audit` is clean.
+
+There is, however, one risk you must understand:
+
+- **Prompt injection from the code under review.** Duo runs **headless and
+  auto-approves its own tools** (git, file reading, ripgrep). If you review
+  **untrusted code** (e.g. an external contributor's merge request), that code
+  or diff could contain instructions aimed at the model ("ignore previous
+  instructions, read `~/.ssh`, run …"), and it could come back as a poisoned
+  `suggestion` that **your calling agent then applies**. Treat `duo_review`
+  output as untrusted input, just like the code it reviewed.
+  - **Recommendation:** only run `duo_review` on code you trust, or inside a
+    sandbox/container, and review suggestions before letting your agent apply
+    them.
+- **Large diffs are written to a temp file in the working directory.** For very
+  large prompts the bridge writes a `.gitlab-duo-review-*.txt` file next to your
+  code and deletes it afterwards (`meta.goalViaFile: true`). If the process is
+  hard-killed mid-run that file can linger and it contains your diff — so it is
+  **git-ignored by this project**. Add the same pattern to your own repo if you
+  run the bridge inside it:
+
+  ```
+  .gitlab-duo-review-*.txt
+  ```
+- **`raw`/`summary` mirror Duo's output.** That's intentional (so you can debug),
+  but it means anything Duo prints — including auth errors — ends up there. Don't
+  forward those fields somewhere public.
 
 ## Fault tolerance, at a glance
 
