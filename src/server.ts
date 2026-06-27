@@ -6,7 +6,7 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 
-import type { DuoConfig } from "./config.js";
+import { type DuoConfig, resolveModel } from "./config.js";
 import { buildReviewGoal, type ReviewInput } from "./goal.js";
 import { runDuo, type RunResult } from "./duoRunner.js";
 import {
@@ -174,7 +174,7 @@ export async function handleReview(
           baseArgs: config.baseArgs,
           goalFlag: config.goalFlag,
           modelFlag: config.modelFlag,
-          model: input.model ?? config.model,
+          model: resolveModel(input.model) ?? config.model,
           extraArgs: config.extraArgs,
           timeoutMs: input.timeoutMs ?? config.timeoutMs,
           cwd: effectiveCwd,

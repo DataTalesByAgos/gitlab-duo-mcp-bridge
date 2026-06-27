@@ -62,13 +62,28 @@ function isTruthy(value: string | undefined): boolean {
   return ["1", "true", "yes", "on"].includes(value.trim().toLowerCase());
 }
 
+export function resolveModel(model: string | undefined): string | undefined {
+  if (!model) return undefined;
+  const MODEL_MAPPING: Record<string, string> = {
+    sonnet: "claude_sonnet_4_6",
+    haiku: "claude_haiku_4_5_20251001",
+    opus: "claude_opus_4_5_20251101",
+    "gpt5-codex": "gpt_5_codex",
+    gpt5: "gpt_5",
+    "gpt5-mini": "gpt_5_mini",
+    gemini: "gemini_2_5_flash_vertex",
+  };
+  const key = model.trim().toLowerCase();
+  return MODEL_MAPPING[key] ?? model;
+}
+
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): DuoConfig {
   return {
     command: trimmedOrUndefined(env.DUO_CLI_COMMAND) ?? "glab",
     baseArgs: splitArgs(env.DUO_CLI_BASE_ARGS, ["duo", "cli", "run"]),
     goalFlag: trimmedOrUndefined(env.DUO_CLI_GOAL_FLAG) ?? "--goal",
     modelFlag: trimmedOrUndefined(env.DUO_CLI_MODEL_FLAG) ?? "--model",
-    model: trimmedOrUndefined(env.GITLAB_DUO_MODEL),
+    model: resolveModel(trimmedOrUndefined(env.GITLAB_DUO_MODEL)),
     extraArgs: splitArgs(env.DUO_CLI_EXTRA_ARGS, []),
     timeoutMs: parseIntOr(env.DUO_TIMEOUT_MS, 120_000),
     cwd: trimmedOrUndefined(env.DUO_CLI_CWD),
